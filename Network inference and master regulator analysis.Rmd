@@ -1,0 +1,140 @@
+---
+title: "Network inference and master regulator analysis"
+author: "Lina ZHU"
+output: html_document
+date: '2023-05-22'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Differential expression analysis in TCGA-STAD 
+```{r}
+rm(list = ls())
+load("STAD.exp.rdata")
+load("clin.data.rdata")
+identical(colnames(STAD.exp), clin.data$Sample)  ## TRUE
+
+## EMT Vs. others
+library(limma)
+group <- rep(0, ncol(STAD.exp))
+group[which(clin.data$ACRG.subtype == "MSS/EMT")] <- 1
+fit <- lmFit(STAD.exp, model.matrix(~ group))
+fit <- eBayes(fit)
+TCGA.gene.tt <- topTable(fit, coef=2, number=Inf, adjust.method="BH")
+```
+
+## 2. network inference and master regulator analysis
+```{r}
+library(RTN)
+
+load("gencode.hg38.lncRNA.rdata")
+lncRNA <- unique(gencode.hg38.lncRNA$lncRNA)  ## 17889
+length(intersect(lncRNA, rownames(STAD.exp)))  ## 14656 lncRNAs in TCGA-STAD data
+
+## separate mRNAs and lncRNAs 
+lncRNA.DE <- TCGA.gene.tt[rownames(TCGA.gene.tt) %in% lncRNA, ]
+gene.DE <- TCGA.gene.tt[!rownames(TCGA.gene.tt) %in% lncRNA, ]
+
+## prioritize top DE lncRNAs and mRNAs 
+de.lncRNA <- rownames(lncRNA.DE[lncRNA.DE$adj.P.Val < 10^-5 &
+                                  abs(lncRNA.DE$logFC) > 1 &
+                                  lncRNA.DE$AveExpr > 1, ]) ## 9
+de.gene <-  rownames(gene.DE[abs(gene.DE$logFC) > 0.5 & 
+                     gene.DE$adj.P.Val < 10^-5 & 
+                     gene.DE$AveExpr > 1.5, ]) ## 1577
+
+de.gene.logFC <- gene.DE[match(de.gene, rownames(gene.DE)), "logFC"]
+names(de.gene.logFC) <- de.gene
+
+EMT.gene <- read.csv("ACRG-EMT.csv", header = F, stringsAsFactors = F)[, 1]
+length(intersect(EMT.gene, de.gene))  ## 117
+
+data <- STAD.exp[rownames(STAD.exp) %in% c(de.lncRNA, de.gene), ]
+
+## network inference and master regulator analysis
+options(cluster=makeCluster(10, "SOCK"))
+rtni <- tni.constructor(expData=data, regulatoryElements=de.lncRNA)
+rtni1 <- tni.permutation(rtni, verbose = T)  
+rtni1 <- tni.bootstrap(rtni1)   
+rtni2 <- tni.dpi.filter(rtni1, eps=0.01) 
+
+rtna.1 <- tni2tna.preprocess(object=rtni2, phenotype=de.gene.logFC,
+                             hits=EMT.gene, duplicateRemoverMethod="average")
+rtna.2 <- tna.mra(rtna.1, tnet="dpi")
+stopCluster(getOption("cluster"))		
+
+rtna.rslt <- rtna.2@results$MRA.results  ## master regulator result
+ig <- tni.graph(rtni2)
+```
+
+## network visualization
+```{r}
+library(RTN)
+library(igraph)
+library(RedeR)
+
+## lncRNA color
+de.lncRNA.logFC <- lncRNA.DE$logFC
+names(de.lncRNA.logFC) <- rownames(lncRNA.DE)
+de.lncRNA.logFC <- de.lncRNA.logFC[intersect(V(ig)$name, names(de.lncRNA.logFC))]
+lncRNA.cols <- c(colorRampPalette(c("mediumseagreen", "white", "#BA55D3"))(10))
+names(lncRNA.cols) <- c(1:10)
+lncRNA.labs <- cut(de.lncRNA.logFC,
+                  breaks=c(-1.2, -1.1, -1, -0.8, -0.6, 0, 1, 1.2, 1.4, 1.6, 1.8),
+                  labels=1:10)
+V(ig)$nodeColor[match(names(de.lncRNA.logFC), V(ig)$name)] <- lncRNA.cols[lncRNA.labs]
+
+
+## gene color
+de.gene.logFC <- gene.DE$logFC
+names(de.gene.logFC) <- rownames(gene.DE)
+de.gene.logFC <- de.gene.logFC[intersect(V(ig)$name, names(de.gene.logFC))]
+ge.cols <- c(colorRampPalette(c("#0083B7", "white", "#CC3300"))(10)) 
+names(ge.cols) <- c(1:10)
+ge.col.labs <- cut(de.gene.logFC, 
+                   breaks=c(-2.2, (-4:4)*0.5, 4),
+                   labels=1:10)
+V(ig)$nodeColor[match(names(de.gene.logFC), V(ig)$name)] <- ge.cols[ge.col.labs]
+
+## node size
+V(ig)$nodeSize <- rep(15, length(V(ig)$name))
+V(ig)$nodeSize[which(V(ig)$name %in% de.lncRNA)] <- 75
+V(ig)$nodeSize[which(V(ig)$name %in% EMT.gene)] <- 45
+
+## node fontSize
+V(ig)$nodeFontSize <- 0
+V(ig)$nodeFontSize[which(V(ig)$name %in% de.lncRNA)] <- 70
+V(ig)$nodeFontSize[which(V(ig)$name %in% EMT.gene)] <- 45
+
+## edgeWidth
+E(ig)$edgeWidth <- 0.8
+
+## node shape
+V(ig)$nodeShape[which(V(ig)$name %in% EMT.gene)] <- "TRIANGLE"
+V(ig)$nodeShape[which(V(ig)$name %in% de.lncRNA)] <- "DIAMOND"
+
+## visualization
+rdp <- RedPort('MyPort')
+calld(rdp)
+addGraph(rdp, ig)
+relax(rdp, ps = TRUE)
+
+## add legend: color
+addLegend.color(rdp, lncRNA.cols, labvec=c("-1.2", rep("",4), "0", rep("",3), "1.8"),
+                size=18, bend=0.5, type="node", vertical = T,
+                ftsize=12,
+                title="lncRNA expression", position="topright")
+addLegend.color(rdp, ge.cols, labvec=c("-2", rep("", 4), "0", rep("",3), "4"),
+                size=18, bend=0.5, type="edge", vertical = T,
+                position="bottomright", 
+                ftsize=12,
+                title="Gene expression")
+## shape legend
+shape<-c('DIAMOND', 'TRIANGLE', 'ELLIPSE')
+addLegend.shape(rdp,shape, type = "node", 
+                labvec = c("Regulatory lncRNAs", "EMT genes", "Other genes"),
+                position="right")
+
+```
