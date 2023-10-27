@@ -1,0 +1,195 @@
+---
+title: "Clincal analysis and validation of MIR200CHG"
+author: "Yixiao(Lina) ZHU"
+output: html_document
+date: '2023-10-27'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## clinical analysis
+```{r}
+rm(list = ls())
+load("Data/STAD.exp.rdata")
+load("Data/clin.data.rdata")
+
+## 1. lncRNA expression boxplot in TCGA
+tar.lncRNA <- c("MIR200CHG", "AC104083.1", "LINC00578")
+clin.data$ACRG.subtype <- factor(clin.data$ACRG.subtype,
+                          levels = c("MSS/EMT", 
+                                     "MSS/TP53-",
+                                     "MSS/TP53+",
+                                     "MSI"))
+
+identical(clin.data$Sample, colnames(STAD.sub.exp))
+clin.data[, 15:17] <- t(STAD.sub.exp[match(tar.lncRNA, rownames(STAD.sub.exp)), ])
+colnames(clin.data)[15:17] <- tar.lncRNA
+
+library(ggpubr)
+AC104083.1.exp.p <- ggplot(clin.data, aes(ACRG.subtype, AC104083.1, fill = ACRG.subtype)) +
+  stat_boxplot(geom = "errorbar", linetype="dashed", width=0.2, position = position_dodge(1)) +
+    stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = NA) +
+  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..), width = 0.25) +
+  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..), width = 0.25) +
+  scale_fill_manual(values=c('#505CA5','#77680C', '#AF3740', '#0B3716')) +
+  stat_compare_means(label = "p.signif", method = "wilcox.test", size = 4,
+                     ref.group = "MSS/EMT", label.y = 6)
+    ylab("AC104083.1 expression")
+
+LINC00578.exp.p <- ggplot(clin.data, aes(ACRG.subtype, LINC00578, fill = ACRG.subtype)) +
+  stat_boxplot(geom = "errorbar", linetype="dashed", width=0.2, position = position_dodge(1)) +
+    stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = NA) +
+  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..), width = 0.25) +
+  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..), width = 0.25) +
+  scale_fill_manual(values=c('#505CA5','#77680C', '#AF3740', '#0B3716')) +
+  stat_compare_means(label = "p.signif", method = "wilcox.test", size = 4,
+                     ref.group = "MSS/EMT", label.y = 2.5) + 
+    ylab("LINC00578 expression")
+
+MIR200CHG.exp.p <- ggplot(clin.data, aes(ACRG.subtype, MIR200CHG, fill = ACRG.subtype)) +
+  stat_boxplot(geom = "errorbar", linetype="dashed", width=0.2, position = position_dodge(1)) +
+    stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = NA) +
+  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..), width = 0.25) +
+  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..), width = 0.25) +
+  scale_fill_manual(values=c('#505CA5','#77680C', '#AF3740', '#0B3716')) +
+  stat_compare_means(label = "p.signif", method = "wilcox.test", size = 4,
+                     ref.group = "MSS/EMT", label.y = 4.7) + 
+    ylab("MIR200CHG expression") + 
+  coord_cartesian(ylim=c(0, 5)) 
+
+plot_grid(MIR200CHG.exp.p, AC104083.1.exp.p, LINC00578.exp.p,
+          nrow = 1, align = "hv", labels = NULL)
+
+
+## 2. lncRNA expression and T stage in TCGA
+clin.data.Tstage <- clin.data[!is.na(clin.data$T.stage), ]
+clin.data.Tstage$T.stage <- factor(clin.data.Tstage$T.stage, 
+                            levels = c("T1", "T2", "T3", "T4"))
+
+MIR200CHG.Tstage.p <- ggplot(clin.data.Tstage, aes(T.stage, MIR200CHG,
+                                            fill = T.stage)) +
+  stat_boxplot(geom = "errorbar", linetype="dashed",
+               width=0.2, position = position_dodge(1)) +
+    stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = NA) +
+  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..), width = 0.25) +
+  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..), width = 0.25) +
+  scale_fill_manual(values=c('gray90','gray70', 'gray50', 'gray30')) +
+    ylab("MIR200CHG expression") 
+
+AC104083.1.Tstage.p <- ggplot(clin.data.Tstage, aes(T.stage, AC104083.1,
+                                            fill = T.stage)) +
+  stat_boxplot(geom = "errorbar", linetype="dashed",
+               width=0.2, position = position_dodge(1)) +
+    stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = NA) +
+  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..), width = 0.25) +
+  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..), width = 0.25) +
+  scale_fill_manual(values=c('gray90','gray70', 'gray50', 'gray30')) +
+    ylab("AC104083.1 expression")
+
+LINC00578.Tstage.p <- ggplot(clin.data.Tstage, aes(T.stage, LINC00578,
+                                            fill = T.stage)) +
+  stat_boxplot(geom = "errorbar", linetype="dashed",
+               width=0.2, position = position_dodge(1)) +
+    stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = NA) +
+  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..), width = 0.25) +
+  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..), width = 0.25) +
+  scale_fill_manual(values=c('gray90','gray70', 'gray50', 'gray30')) +
+    ylab("LINC00578 expression") 
+
+
+plot_grid(MIR200CHG.Tstage.p, AC104083.1.Tstage.p,  
+          LINC00578.Tstage.p,
+          nrow = 1, align = "hv")
+
+```
+
+## Validation MIR200CHG expression in GSE15459 and CCLE
+```{r}
+rm(list = ls())
+## 1. ACRG dataset: Only MIR200CHG can be found and the name is "U47924.27".
+load("Data/ACRG.rdata")
+ACRG.exp <- GSE62254.exp
+ACRG.clin <- GSE62254.clin
+
+ACRG.clin[, "MIR200CHG"] <- ACRG.exp[rownames(ACRG.exp) == "U47924.27", ]
+ACRG.clin$Subtype <- factor(ACRG.clin$Subtype,
+                          levels = c("EMT", 
+                                     "MSS/TP53-",
+                                     "MSS/TP53+",
+                                     "MSI"))
+library(ggplot2)
+library(ggpubr)
+## MIR200CHG expression among subtypes
+ACRG.MIR200CHG.exp.p <- ggplot(ACRG.clin, aes(Subtype, MIR200CHG, fill = Subtype)) +
+  stat_boxplot(geom = "errorbar", linetype="dashed", width=0.2, position = position_dodge(1)) +
+    stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = NA) +
+  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..), width = 0.25) +
+  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..), width = 0.25) +
+  scale_fill_manual(values=c('#505CA5','#77680C', '#AF3740', '#0B3716')) +
+  stat_compare_means(label = "p.signif", method = "wilcox.test", size = 4,
+                     ref.group = "EMT", label.y = 2.22) +  
+    ylab("MIR200CHG expression") +
+  ggtitle("ACRG cohort")
+
+
+## 2. GSE15459 dataset: Only MIR200CHG can be found and the name is "U47924.27".
+load("Data/GSE15459.rdata")
+GSE15459.clin$OS.event <- ifelse(GSE15459.clin$OS.event == 0, 1, 0)
+identical(colnames(GSE15459.exp), GSE15459.clin$Sample)
+
+GSE15459.clin[, "MIR200CHG"] <- GSE15459.exp[rownames(GSE15459.exp) == "U47924.27", ]
+GSE15459.clin <- as.data.frame(GSE15459.clin)
+
+GSE15459.clin$Subtype <- factor(GSE15459.clin$Subtype,
+                          levels = c("EMT", 
+                                     "MSS/TP53-",
+                                     "MSS/TP53+",
+                                     "MSI"))
+
+## MIR200CHG expression among subtypes
+GSE15459.MIR200CHG.exp.p <- ggplot(GSE15459.clin, aes(Subtype, MIR200CHG, fill = Subtype)) +
+  stat_boxplot(geom = "errorbar", linetype="dashed", width=0.2, position = position_dodge(1)) +
+    stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = NA) +
+  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..), width = 0.25) +
+  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..), width = 0.25) +
+  scale_fill_manual(values=c('#505CA5','#77680C', '#AF3740', '#0B3716')) +
+  stat_compare_means(label = "p.signif", method = "wilcox.test", size = 4,
+                     ref.group = "EMT", label.y = 9.7) +  
+    ylab("MIR200CHG expression") + 
+  ggtitle("GSE15459 cohort")
+
+
+## 3. CCLE dataset
+load("Data/CCLE.GC.gep.rdata")
+CCLE.clin <- read.csv("Data/CCLE.clin.csv", header = T, 
+                      stringsAsFactors = F)
+
+tar.lncRNA <- "MIR200CHG"
+tar.lncRNA.ge <- GC.ge[rownames(GC.ge) %in% tar.lncRNA, ]
+CCLE.clin <- cbind(CCLE.clin, t(tar.lncRNA.ge))
+CCLE.clin$Subtype <- factor(CCLE.clin$Subtype, 
+                            levels = c("EMT", 
+                                     "MSS.TP53N",
+                                     "MSS.TP53P",
+                                     "MSI"))
+
+MIR200CHG.ccle.p <- ggplot(CCLE.clin, aes(Subtype, MIR200CHG, fill = Subtype)) +
+  stat_boxplot(geom = "errorbar", linetype="dashed", width=0.2, position = position_dodge(1)) +
+    stat_boxplot(aes(ymin = ..lower.., ymax = ..upper..), outlier.shape = NA) +
+  stat_boxplot(geom = "errorbar", aes(ymin = ..ymax..), width = 0.25) +
+  stat_boxplot(geom = "errorbar", aes(ymax = ..ymin..), width = 0.25) +
+  scale_fill_manual(values=c('#505CA5','#77680C', '#AF3740', '#0B3716')) +
+  stat_compare_means(label = "p.signif", method = "wilcox.test", size = 4,
+                     ref.group = "EMT", label.y = 6) +
+    ylab("MIR200CHG expression") + 
+  ggtitle("CCLE") + 
+  coord_cartesian(ylim=c(0, 6.3)) +
+  scale_x_discrete(breaks=c("EMT","MSS.TP53N","MSS.TP53P","MSI"),
+        labels=c("MSS/EMT", "MSS/TP53-", "MSS/TP53+", "MSI"))
+
+plot_grid(ACRG.MIR200CHG.exp.p, GSE15459.MIR200CHG.exp.p,
+          MIR200CHG.ccle.p,
+          nrow = 1, align = "hv")
+```

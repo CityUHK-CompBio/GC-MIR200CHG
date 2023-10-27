@@ -1,0 +1,59 @@
+---
+title: "Univariate and multivariate analysis"
+author: "Yixiao(Lina) ZHU"
+output: html_document
+date: '2023-10-27'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls())
+load("Data/STAD.exp.rdata")
+load("Data/clin.data.rdata")
+tar.lncRNA <- c("MIR200CHG", "AC104083.1", "LINC00578")
+
+identical(clin.data$Sample, colnames(STAD.sub.exp))
+for (i in 1:length(tar.lncRNA)) {
+  clin.data[, tar.lncRNA[i]] <- STAD.sub.exp[rownames(STAD.sub.exp) == tar.lncRNA[i], ]
+}
+clin.data[, "Stage1"] <- NA
+clin.data$Stage1[clin.data$Stage %in% c("1", "2")] <- "T12"
+clin.data$Stage1[clin.data$Stage %in% c("3", "4")] <- "T34"
+
+library(survival)
+
+## 1. Univariate analysis
+tar <- c(tar.lncRNA, "Gender", "Stage1", "M.stage")
+univ_formulas <- sapply(tar,
+                        function(x) as.formula(paste('Surv(OS.time, OS.event)~', paste0("`",x,"`"))))
+
+univ_models <- lapply(univ_formulas, function(x){coxph(x, data = clin.data)})
+univ_results <- lapply(univ_models,
+                       function(x){ 
+                          x <- summary(x)
+                          p.value<-signif(x$wald["pvalue"], digits=2)
+                          wald.test<-signif(x$wald["test"], digits=3)
+                          beta<-signif(x$coef[1], digits=2);#coeficient beta
+                          HR <-round(x$coef[2], digits=2);#exp(beta)
+                          HR.confint.lower <- format(x$conf.int[,"lower .95"], nsmall=2,digits=2)
+                          HR.confint.upper <- format(x$conf.int[,"upper .95"],nsmall=2,digits=2)
+                          HR.CI <- paste0(HR, " (",
+                                       HR.confint.lower, "-", HR.confint.upper, ")")
+                          res<-c(beta, HR, HR.confint.lower, HR.confint.upper, HR.CI, p.value)
+                          names(res)<-c("beta", "HR", "HR.lower","HR.upper", "HR.CI",
+                                        "Pvalue")
+                          return(res)})
+uni_res <- as.data.frame(do.call(rbind, univ_results))
+uni_res
+
+## 2. Multivariate analysis
+coxph(Surv(OS.time, OS.event) ~ Gender + Stage1 + M.stage + MIR200CHG + AC104083.1 + LINC00578, data = clin.data)
+
+
+      
+```
+
+
